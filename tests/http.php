@@ -225,6 +225,79 @@ check('and its next report is told so: 410', $st === 410 && ($body['error'] ?? '
 [, , $html] = $owner('GET', '/');
 check('it is gone from the list and its page', $st === 404 && !str_contains($html, 'data-site="'));
 
+// ---- asking a site to update (a stand-in for the site takes the command)
+$fakePort = (int)(function () { $sock = stream_socket_server('tcp://127.0.0.1:0'); $n = (string)stream_socket_get_name($sock, false); fclose($sock); return substr($n, strrpos($n, ':') + 1); })();
+$fakeLog = $storage . '/fake-site.log';
+$fakeMode = $storage . '/fake-site.mode';
+$fakeSecret = $storage . '/fake-site.secret';
+$fake = proc_open(['php', '-S', '127.0.0.1:' . $fakePort, $root . '/tests/fake-site.php'], [1 => ['file', $storage . '/fake.out', 'a'], 2 => ['file', $storage . '/fake.out', 'a']], $fp, $root, ['FAKE_SITE_LOG' => $fakeLog, 'FAKE_SITE_MODE' => $fakeMode, 'FAKE_SITE_SECRET_FILE' => $fakeSecret] + getenv());
+register_shutdown_function(static function () use ($fake): void { proc_terminate($fake); proc_close($fake); });
+for ($i = 0; $i < 50; $i++) { if (($c = @stream_socket_client("tcp://127.0.0.1:$fakePort", $en, $es, 0.2)) !== false) { fclose($c); break; } usleep(100000); }
+$addSite = function (string $label, bool $update) use ($owner, $csrf, $base, $fakePort, &$storage): array {
+    [, $h] = $owner('POST', '/sites', ['_csrf' => $csrf, 'label' => $label]);
+    $path = $h['location'];
+    [, , $html] = $owner('GET', $path);
+    preg_match('/data-copy-source="code">([^<]+)</', $html, $m);
+    $body = json_encode(['protocol' => 1, 'code' => $m[1], 'site' => ['name' => $label, 'url' => "http://127.0.0.1:$fakePort", 'admin_url' => "http://127.0.0.1:$fakePort/admin", 'version' => '0.1.0']]);
+    [, $data] = api($base, '/api/v1/connect', $body);
+    $report = json_encode(['protocol' => 1, 'site' => ['name' => $label, 'url' => "http://127.0.0.1:$fakePort", 'admin_url' => "http://127.0.0.1:$fakePort/admin"], 'faros' => ['version' => '0.1.0'], 'updates' => ['current' => '0.1.0', 'latest' => '0.2.0', 'has_update' => $update]]);
+    api($base, '/api/v1/report', $report, signed($data['site_id'], $data['secret'], '/api/v1/report', $report));
+    return ['path' => $path, 'id' => (int)substr($path, strrpos($path, '/') + 1), 'site_id' => $data['site_id'], 'secret' => $data['secret'], 'report' => $report];
+};
+$a = $addSite('Update me', true);
+$b = $addSite('Up to date', false);
+file_put_contents($fakeSecret, $a['secret']);
+
+[, , $html] = $owner('GET', '/');
+check('the list offers Update all for the one site that has a newer release', str_contains($html, 'Update all (1)') && str_contains($html, '/sites/' . $a['id'] . '/update') && !str_contains($html, '/sites/' . $b['id'] . '/update'), substr(strip_tags($html), 0, 400));
+[, , $html] = $owner('GET', $a['path']);
+check('its page has Update to 0.2.0', str_contains($html, 'Update to 0.2.0') && str_contains($html, 'data-update-site'));
+[, , $html] = $owner('GET', $b['path']);
+check('the one that is up to date has no such button', !str_contains($html, 'data-update-site'));
+[$st] = $owner('POST', $b['path'] . '/update', ['_csrf' => $csrf]);
+check('and asking it anyway does nothing', $st === 303 && !is_file($fakeLog), $st);
+
+[$st, $h] = $owner('POST', $a['path'] . '/update', ['_csrf' => $csrf]);
+[, , $html] = $owner('GET', $a['path']);
+$log = array_map(fn($l) => json_decode($l, true), array_filter(explode("\n", (string)@file_get_contents($fakeLog))));
+check('Update sends the site a command it accepts: signed, for the id it knows, update, protocol 1', $st === 303 && count($log) === 1 && $log[0]['good'] === true && $log[0]['site'] === $a['site_id'] && ($log[0]['body']['command'] ?? '') === 'update' && ($log[0]['body']['protocol'] ?? 0) === 1, $log);
+check('the page says it is updating, and offers nothing more to press', str_contains($html, 'is updating.') && str_contains($html, 'data-command') && !str_contains($html, 'data-update-site'), substr(strip_tags($html), 0, 500));
+[, , $list] = $owner('GET', '/');
+check('the list shows Updating… for it, and no Update all', str_contains($list, 'Updating…') && !str_contains($list, 'Update all'));
+
+$commandId = $log[0]['body']['command_id'];
+$done = json_decode($a['report'], true) + [];
+$done['updates'] = ['current' => '0.2.0', 'latest' => '0.2.0', 'has_update' => false];
+$done['command'] = ['id' => $commandId, 'type' => 'update', 'state' => 'installed', 'message' => 'GnozioCMS 0.2.0 is installed.', 'from' => '0.1.0', 'to' => '0.2.0'];
+$body = json_encode($done);
+[$st, $resp] = api($base, '/api/v1/report', $body, signed($a['site_id'], $a['secret'], '/api/v1/report', $body));
+[, , $html] = $owner('GET', $a['path']);
+[, , $list] = $owner('GET', '/');
+check('the report with the outcome is taken, and Omni shows it done', $st === 200 && str_contains($html, 'GnozioCMS 0.2.0 is installed.') && str_contains($html, 'Installed') && !str_contains($list, 'Updating…'), [$st, substr(strip_tags($html), 0, 300)]);
+
+// refused answers
+$again = json_decode($a['report'], true);
+$body = json_encode($again);
+api($base, '/api/v1/report', $body, signed($a['site_id'], $a['secret'], '/api/v1/report', $body));
+foreach ([['not_allowed', 'does not let Omni install updates'], ['busy', 'already updating'], ['404', 'does not take commands from Omni yet']] as [$mode, $words]) {
+    file_put_contents($fakeMode, $mode);
+    $owner('POST', $a['path'] . '/update', ['_csrf' => $csrf]);
+    [, , $html] = $owner('GET', $a['path']);
+    check("a site that answers $mode: Omni says so in words, and the button stays", str_contains($html, $words) && str_contains($html, 'data-update-site'), substr(strip_tags($html), 0, 300));
+}
+file_put_contents($fakeMode, 'accept');
+[$st] = $owner('POST', '/sites/update-all', ['_csrf' => $csrf]);
+[, , $html] = $owner('GET', '/');
+check('Update all asks every site that has an update', $st === 303 && str_contains($html, '1 site is updating.'), substr(strip_tags($html), 0, 300));
+
+// a command is never started by a stranger
+$lines = static fn(): int => count(array_filter(explode("\n", (string)file_get_contents($GLOBALS['fakeLog']))));
+$before = $lines();
+$stranger2 = client($base);
+[$st] = $stranger2('POST', $a['path'] . '/update', ['_csrf' => 'x']);
+[$st2] = $stranger2('POST', '/sites/update-all', ['_csrf' => 'x']);
+check('a stranger cannot ask a site to update, or all of them', in_array($st, [303, 403], true) && in_array($st2, [303, 403], true) && $lines() === $before, [$st, $st2]);
+
 // ---- limits on guessing
 for ($i = 0, $last = 0; $i < 10; $i++) {
     [$last] = api($base, '/api/v1/connect', $connect('AAAA-BBBB-CCCC-DDDD'));

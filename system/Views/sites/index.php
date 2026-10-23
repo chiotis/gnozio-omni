@@ -11,10 +11,18 @@ $chip = static fn(array $health, string $key): string => isset($health['chips'][
     <h1 class="text-lg font-semibold text-slate-900">Sites</h1>
     <p class="text-xs text-slate-500"><?= $counts['all'] ?> <?= $counts['all'] === 1 ? 'site' : 'sites' ?> · <?= $counts['ok'] ?> healthy · <?= $counts['attention'] ?> need attention</p>
   </div>
+  <div class="flex flex-wrap items-center gap-2">
+  <?php if (($updatable ?? 0) > 0): ?>
+    <form method="post" action="/sites/update-all" data-confirm="Ask <?= (int)$updatable ?> <?= $updatable === 1 ? 'site' : 'sites' ?> to install the latest release? Each makes its verified backup first and takes the update back by itself if it does not work there." data-update-all>
+      <?= csrf_field() ?>
+      <button type="submit" class="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100">Update all (<?= (int)$updatable ?>)</button>
+    </form>
+  <?php endif; ?>
   <button type="button" data-canvas-open="canvas-add" class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-700">
     <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
     Add site
   </button>
+  </div>
 </div>
 
 <nav class="mb-3 flex flex-wrap gap-1.5" aria-label="Show">
@@ -63,6 +71,14 @@ $chip = static fn(array $health, string $key): string => isset($health['chips'][
               <td class="px-3 py-2.5"><?= $chip($health, 'analytics') ?></td>
               <td class="whitespace-nowrap px-3 py-2.5 text-xs <?= $health['silent'] ? 'font-semibold text-red-600' : 'text-slate-500' ?>" title="<?= e(local_time($health['last_heard'])) ?>"><?= e($site['last_report_at'] ? ago($site['last_report_at'], $now) : '—') ?></td>
               <td class="whitespace-nowrap px-4 py-2.5 text-right">
+                <?php if (\Omni\Core\Commands::canUpdate($site, $now)): ?>
+                  <form method="post" action="/sites/<?= (int)$site['id'] ?>/update" class="inline" data-confirm="Ask <?= e($site['label'] ?: $site['name']) ?> to install the latest release?">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="inline-flex rounded p-1 text-blue-500 hover:bg-blue-50 hover:text-blue-700" title="Update" aria-label="Update <?= e($site['label'] ?: ($site['name'] ?: 'the site')) ?>">
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>
+                    </button>
+                  </form>
+                <?php endif; ?>
                 <?php if ($site['admin_url'] !== ''): ?>
                   <a href="<?= e($site['admin_url']) ?>" target="_blank" rel="noopener noreferrer" class="inline-flex rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Open the admin" aria-label="Open the admin of <?= e($site['label'] ?: $site['name']) ?>">
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>

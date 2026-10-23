@@ -83,6 +83,8 @@ final class App
         $router->post('/sites/{id}/code', fn(string $id) => $sites->newCode((int)$id));
         $router->post('/sites/{id}/rename', fn(string $id) => $sites->rename((int)$id));
         $router->post('/sites/{id}/remove', fn(string $id) => $sites->remove((int)$id));
+        $router->post('/sites/{id}/update', fn(string $id) => $sites->update((int)$id));
+        $router->post('/sites/update-all', fn() => $sites->updateAll());
         $updates = new UpdatesController($this);
         $router->get('/updates', fn() => $updates->index());
         $router->post('/updates/check', fn() => $updates->check());
@@ -112,6 +114,11 @@ final class App
         session_regenerate_id(true);
         $_SESSION['owner_id'] = $ownerId;
         $this->owners->touchLogin($ownerId);
+    }
+
+    public function commands(): Commands
+    {
+        return new Commands($this->sites, $this->secrets, [Http::class, 'request']);
     }
 
     public function updater(): Updater

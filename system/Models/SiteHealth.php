@@ -13,7 +13,7 @@ final class SiteHealth
     /** A site is silent after this long without a report, or twice its report interval if that is longer. */
     public const SILENT_AFTER = 172800;
 
-    private const MODES = ['off' => 'Off', 'custom' => 'Own code', 'platform' => 'FarosCMS'];
+    private const MODES = ['off' => 'Off', 'custom' => 'Own code', 'platform' => 'GnozioCMS'];
     private const INTERVALS = ['daily' => 86400, 'weekly' => 604800, 'monthly' => 2678400];
 
     /**
@@ -34,6 +34,12 @@ final class SiteHealth
         if ($silent) {
             array_unshift($issues, ['text' => 'No report since ' . gmdate('Y-m-d H:i', (int)$heardAt) . ' UTC', 'tone' => 'red']);
         }
+        $command = self::command($site, $now);
+        if ($command !== null && $command['state'] === 'busy') {
+            $chips['updates'] = ['label' => 'Updating…', 'tone' => 'blue', 'title' => $command['text']];
+        } elseif ($command !== null && $command['tone'] !== '') {
+            array_unshift($issues, ['text' => $command['text'], 'tone' => $command['tone']]);
+        }
 
         if ($status === 'disconnected') {
             [$state, $label, $tone] = ['disconnected', 'Disconnected', 'slate'];
@@ -49,6 +55,36 @@ final class SiteHealth
         }
 
         return ['state' => $state, 'label' => $label, 'tone' => $tone, 'silent' => $silent, 'last_heard' => $lastHeard ? (string)$lastHeard : null, 'report' => $report, 'chips' => $chips, 'issues' => $issues];
+    }
+
+    /**
+     * The last update Omni asked for, while it runs and for a week after it ended badly.
+     *
+     * @param array<string, mixed> $site
+     * @return array{state: string, text: string, tone: string}|null state is busy (still running) or done
+     */
+    public static function command(array $site, int $now): ?array
+    {
+        $state = (string)($site['command_state'] ?? '');
+        $at = strtotime((string)($site['command_at'] ?? ''));
+        if ($state === '' || $at === false) {
+            return null;
+        }
+        $message = trim((string)($site['command_message'] ?? ''));
+        if (in_array($state, ['sending', 'accepted', 'running'], true)) {
+            return $now - $at < \Omni\Core\Commands::IN_FLIGHT
+                ? ['state' => 'busy', 'text' => $message !== '' ? $message : 'Updating.', 'tone' => '']
+                : ['state' => 'done', 'text' => 'Asked to update on ' . gmdate('Y-m-d H:i', $at) . ' UTC, but the site never said how it went.', 'tone' => 'amber'];
+        }
+        if ($now - $at > 7 * 86400) {
+            return null;
+        }
+        return match ($state) {
+            'installed', 'up_to_date' => ['state' => 'done', 'text' => $message, 'tone' => ''],
+            'unverified' => ['state' => 'done', 'text' => 'Updated, but the site could not check itself: ' . $message, 'tone' => 'amber'],
+            'rolled_back' => ['state' => 'done', 'text' => 'The update was taken back: ' . $message, 'tone' => 'red'],
+            default => ['state' => 'done', 'text' => 'The update did not happen: ' . $message, 'tone' => 'red'],
+        };
     }
 
     /** @param array<string, mixed> $r @return array<string, array{label: string, tone: string, title: string}> */
@@ -138,7 +174,7 @@ final class SiteHealth
         }
 
         if (($r['updates']['has_update'] ?? null) === true) {
-            $issues[] = ['text' => 'FarosCMS ' . (string)($r['updates']['latest'] ?? '') . ' is available', 'tone' => 'blue'];
+            $issues[] = ['text' => 'GnozioCMS ' . (string)($r['updates']['latest'] ?? '') . ' is available', 'tone' => 'blue'];
         }
         return $issues;
     }

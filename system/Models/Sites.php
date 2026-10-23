@@ -126,8 +126,27 @@ final class Sites
             $siteId,
         ]);
         $this->db->prepare('INSERT INTO reports (site_id, received_at, report) VALUES (?, ?, ?)')->execute([$siteId, $at, $json]);
+        // How the last command went, when the report says so for the command Omni sent.
+        $command = is_array($report['command'] ?? null) ? $report['command'] : null;
+        if ($command !== null && is_string($command['id'] ?? null)) {
+            $state = (string)($command['state'] ?? '');
+            $this->db->prepare('UPDATE sites SET command_state = ?, command_message = ?, command_at = ? WHERE id = ? AND command_id = ?')->execute([
+                in_array($state, ['accepted', 'running', 'installed', 'unverified', 'rolled_back', 'up_to_date', 'failed'], true) ? $state : 'failed',
+                self::text($command['message'] ?? '', 500),
+                $at,
+                $siteId,
+                $command['id'],
+            ]);
+        }
         $this->db->prepare('DELETE FROM reports WHERE site_id = ? AND id NOT IN (SELECT id FROM reports WHERE site_id = ? ORDER BY id DESC LIMIT ?)')
             ->execute([$siteId, $siteId, max(1, $keep)]);
+    }
+
+    /** Keeps the command Omni sent the site and where it stands. */
+    public function setCommand(int $siteId, string $commandId, string $state, string $message, ?int $now = null): void
+    {
+        $this->db->prepare('UPDATE sites SET command_id = ?, command_state = ?, command_message = ?, command_at = ? WHERE id = ?')
+            ->execute([$commandId, $state, self::text($message, 500), gmdate('c', $now ?? time()), $siteId]);
     }
 
     public function countReports(int $siteId): int

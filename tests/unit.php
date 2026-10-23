@@ -121,7 +121,7 @@ $report = static fn(array $over = []): array => array_replace_recursive([
 $row = static fn(array $r, string $status = 'connected', ?int $heard = null): array => ['status' => $status, 'latest_report' => json_encode($r), 'last_report_at' => gmdate('c', $heard ?? $now - 600), 'connected_at' => gmdate('c', $now - 86400)];
 $h = SiteHealth::of($row($report()), $now, 21600);
 check('a healthy site', [$h['state'], $h['label'], $h['issues']], ['ok', 'Healthy', []]);
-check('its chips', [$h['chips']['health']['tone'], $h['chips']['storage']['label'], $h['chips']['backup']['label'], $h['chips']['updates']['tone'], $h['chips']['analytics']['label']], ['green', '300 MB / 1.0 GB', 'Success · 1 h ago', 'green', 'FarosCMS']);
+check('its chips', [$h['chips']['health']['tone'], $h['chips']['storage']['label'], $h['chips']['backup']['label'], $h['chips']['updates']['tone'], $h['chips']['analytics']['label']], ['green', '300 MB / 1.0 GB', 'Success · 1 h ago', 'green', 'GnozioCMS']);
 $h = SiteHealth::of($row($report(['updates' => ['latest' => '0.2.0', 'has_update' => true]])), $now, 21600);
 check('an update is news, not a problem', [$h['state'], $h['chips']['updates']['label'], $h['issues'][0]['tone']], ['ok', '0.1.101 → 0.2.0', 'blue']);
 $h = SiteHealth::of($row($report(['system' => ['summary' => ['status' => 'warning', 'label' => 'Warnings'], 'checks' => [['label' => 'Email provider', 'value' => 'not configured', 'status' => 'warning']]]])), $now, 21600);
@@ -167,6 +167,63 @@ for ($i = 0; $i < $zip->numFiles; $i++) { $names[] = $zip->getNameIndex($i); }
 check('the package holds only what an update may write, and what it must', [array_values(array_filter($names, fn($n) => !Updater::allowedPath($n))), in_array('system/Core/Updater.php', $names, true), in_array('VERSION', $names, true)], [[], true, true]);
 check('its manifest is one Omni accepts', $updater->validateManifest($one)['version'] ?? null, trim((string)file_get_contents(ROOT_PATH . '/VERSION')));
 exec('rm -rf ' . escapeshellarg(STORAGE_PATH . '/b1') . ' ' . escapeshellarg(STORAGE_PATH . '/b2'));
+
+// ---- commands
+use Omni\Core\Commands;
+$cDb = Database::open(STORAGE_PATH . '/db/commands.sqlite');
+$cSites = new Sites($cDb);
+$cBox = new SecretBox(STORAGE_PATH . '/key');
+$cId = $cSites->create('Asked');
+$cCode = $cSites->newCode($cId, $now);
+$cSecret = SecretBox::newSecret();
+$cSites->connect($cCode['code'], ['name' => 'Asked', 'url' => 'https://asked.test/sub/', 'admin_url' => 'https://asked.test/sub/admin', 'version' => '0.1.0'], $cBox->encrypt($cSecret), $now);
+$withUpdate = ['protocol' => 1, 'site' => ['name' => 'Asked', 'url' => 'https://asked.test/sub/', 'admin_url' => 'https://asked.test/sub/admin'], 'faros' => ['version' => '0.1.0'], 'updates' => ['current' => '0.1.0', 'latest' => '0.2.0', 'has_update' => true]];
+$cSites->recordReport($cId, $withUpdate, 10, $now);
+check('a site with a newer release can be asked to update', Commands::canUpdate($cSites->find($cId), $now), true);
+check('not one that is up to date, never reported, or not connected', [
+    Commands::canUpdate(['status' => 'connected', 'url' => 'https://x.test', 'latest_report' => json_encode(['updates' => ['has_update' => false]])], $now),
+    Commands::canUpdate(['status' => 'connected', 'url' => 'https://x.test'], $now),
+    Commands::canUpdate(['status' => 'disconnected', 'url' => 'https://x.test', 'latest_report' => json_encode($withUpdate)], $now),
+], [false, false, false]);
+$seen = [];
+$http = function (string $method, string $url, array $headers, string $body, int $timeout) use (&$seen, &$reply): array { $seen = compact('method', 'url', 'headers', 'body'); return $reply; };
+$commands = new Commands($cSites, $cBox, $http, fn() => $now);
+$reply = ['status' => 202, 'body' => '{"ok":true,"state":"accepted"}', 'error' => ''];
+$r = $commands->update($cSites->find($cId));
+$h = [];
+foreach ($seen['headers'] as $line) { [$k, $v] = explode(':', $line, 2); $h[strtolower($k)] = trim($v); }
+$data = json_decode($seen['body'], true);
+check('the command goes to the site\'s own address, in its folder', [$seen['method'], $seen['url']], ['POST', 'https://asked.test/sub/_omni/command']);
+check('it is update, protocol 1, with an id', [$data['protocol'], $data['command'], preg_match('/^c_[0-9a-f]{16}$/', $data['command_id'])], [1, 'update', 1]);
+check('signed with the site\'s secret over the path under its folder', $h['x-omni-signature'], Signature::sign($cSecret, 'POST', '/sub/_omni/command', $h['x-omni-timestamp'], $h['x-omni-nonce'], $seen['body']));
+check('and with the id the site knows, the time now', [$h['x-omni-site'], $h['x-omni-timestamp']], [$cSites->find($cId)['public_id'], (string)$now]);
+check('accepted: told so, kept as accepted', [$r['ok'], $cSites->find($cId)['command_state'], $cSites->find($cId)['command_id'] === $data['command_id']], [true, 'accepted', true]);
+check('while it runs the site cannot be asked again', Commands::canUpdate($cSites->find($cId), $now + 60), false);
+check('a command with no outcome for 30 minutes is taken as lost', Commands::canUpdate($cSites->find($cId), $now + 1801), true);
+$cSites->recordReport($cId, $withUpdate + ['command' => ['id' => $data['command_id'], 'state' => 'installed', 'message' => 'GnozioCMS 0.2.0 is installed.']], 10, $now + 90);
+check('the site\'s report says how it ended', [$cSites->find($cId)['command_state'], $cSites->find($cId)['command_message']], ['installed', 'GnozioCMS 0.2.0 is installed.']);
+$cSites->recordReport($cId, $withUpdate + ['command' => ['id' => 'c_ffffffffffffffff', 'state' => 'failed', 'message' => 'x']], 10, $now + 100);
+check('a report about a command Omni did not send changes nothing', $cSites->find($cId)['command_state'], 'installed');
+foreach ([[404, '{}', 'does not take commands from Omni yet'], [403, '{"error":"not_allowed"}', 'does not let Omni install updates'], [409, '{"error":"busy"}', 'already updating'], [401, '{"error":"invalid_signature"}', 'no longer recognises this Omni'], [401, '{"error":"stale_timestamp"}', 'clocks'], [500, '{}', 'HTTP 500']] as [$status, $body, $part]) {
+    $reply = ['status' => $status, 'body' => $body, 'error' => ''];
+    $r = $commands->update($cSites->find($cId));
+    check("a $status from the site is said in words", [$r['ok'], str_contains($r['message'], $part), $cSites->find($cId)['command_state']], [false, true, 'refused']);
+}
+$reply = ['status' => 0, 'body' => '', 'error' => 'Connection refused'];
+check('a site that cannot be reached', str_contains($commands->update($cSites->find($cId))['message'], 'Connection refused'), true);
+check('a site that is not connected is not asked', $commands->update(['status' => 'pending', 'url' => '', 'label' => 'x', 'name' => '', 'id' => 1, 'public_id' => 's_x'])['ok'], false);
+$row = ['command_state' => 'accepted', 'command_at' => gmdate('c', $now), 'command_message' => 'Asked.'];
+check('SiteHealth: updating while it runs', [SiteHealth::command($row, $now + 10)['state'], SiteHealth::command($row, $now + 10)['tone']], ['busy', '']);
+check('SiteHealth: lost after 30 minutes, with a warning', [SiteHealth::command($row, $now + 1801)['state'], SiteHealth::command($row, $now + 1801)['tone']], ['done', 'amber']);
+check('SiteHealth: a good outcome says nothing is wrong; a rolled back one is red; a failed one too', [
+    SiteHealth::command(['command_state' => 'installed', 'command_at' => gmdate('c', $now), 'command_message' => 'ok'], $now)['tone'],
+    SiteHealth::command(['command_state' => 'rolled_back', 'command_at' => gmdate('c', $now), 'command_message' => 'x'], $now)['tone'],
+    SiteHealth::command(['command_state' => 'failed', 'command_at' => gmdate('c', $now), 'command_message' => 'x'], $now)['tone'],
+], ['', 'red', 'red']);
+check('SiteHealth: a bad outcome is forgotten after a week', SiteHealth::command(['command_state' => 'failed', 'command_at' => gmdate('c', $now), 'command_message' => 'x'], $now + 8 * 86400), null);
+check('SiteHealth: a site that was never asked', SiteHealth::command(['command_state' => null], $now), null);
+$cDb = null;
+check('the stream HTTP helper reports no answer as status 0, never an exception', [\Omni\Core\Http::request('GET', 'http://127.0.0.1:9/', [], '', 2)['status']], [0]);
 
 // ---- helpers
 check('sizes', [bytes(0), bytes(1536), bytes(300 * 1048576), bytes(null)], ['0 B', '1.5 KB', '300 MB', '—']);
