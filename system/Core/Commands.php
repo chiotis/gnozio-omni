@@ -73,7 +73,7 @@ final class Commands
         $data = is_array($data) ? $data : [];
 
         if ($answer['status'] === 202 && ($data['ok'] ?? false) === true) {
-            $this->sites->setCommand((int)$site['id'], $id, 'accepted', 'Asked to update; waiting for the site to report.', $now);
+            $this->sites->answerCommand((int)$site['id'], $id, 'accepted', 'Asked to update; waiting for the site to report.', $now);
             return ['ok' => true, 'message' => $name . ' is updating.'];
         }
         $message = match (true) {
@@ -85,7 +85,7 @@ final class Commands
             ($data['error'] ?? '') === 'stale_timestamp' => 'The site refused: the clocks of Omni and the site are more than five minutes apart.',
             default => 'The site refused (HTTP ' . $answer['status'] . (($data['error'] ?? '') !== '' ? ', ' . $data['error'] : '') . ').',
         };
-        $this->sites->setCommand((int)$site['id'], $id, 'refused', $message, $now);
+        $this->sites->answerCommand((int)$site['id'], $id, 'refused', $message, $now);
         return ['ok' => false, 'message' => $name . ': ' . $message];
     }
 }

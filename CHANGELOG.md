@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-10-23 — A quick site no longer loses the outcome of its update
+- **Fixed:** a site that is quick answers `accepted` and reports how its update ended before Omni has read that answer; Omni then wrote *accepted* over the outcome, and the site's page stayed on "updating" until the command was taken as lost. The answer is now kept only while the command is still being sent, so the outcome always stays. Found by trying Omni 0.1.2 against a real site (GnozioCMS 0.1.177) instead of a stand-in.
+- Test: a site that reports before its answer is read (`tests/unit.php`).
+
 ## 0.1.2 — 2026-10-23 — Update the sites from Omni
 - **Update all (N)** on the list, an update button on each row that has a newer GnozioCMS, and **Update to X** on the site's page. Omni sends the site a signed `update` command; the site accepts at once, makes its verified backup, installs the latest official release (taking it back by itself if it does not work) and reports how it went, which Omni shows on the site's page and on its list row (*Updating…*, then the outcome).
 - **A command carries no version and no code.** The site installs from its own update source and checks the package, so Omni can only start the official update. The site's owner can switch it off; Omni says why a site refused (not allowed, busy, not answering, no longer recognising this Omni, clocks apart, too old to take commands).
