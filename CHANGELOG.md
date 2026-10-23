@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 — 2026-10-23 — Update the sites from Omni
+- **Update all (N)** on the list, an update button on each row that has a newer GnozioCMS, and **Update to X** on the site's page. Omni sends the site a signed `update` command; the site accepts at once, makes its verified backup, installs the latest official release (taking it back by itself if it does not work) and reports how it went, which Omni shows on the site's page and on its list row (*Updating…*, then the outcome).
+- **A command carries no version and no code.** The site installs from its own update source and checks the package, so Omni can only start the official update. The site's owner can switch it off; Omni says why a site refused (not allowed, busy, not answering, no longer recognising this Omni, clocks apart, too old to take commands).
+- A command with no outcome after 30 minutes is taken as lost. A bad outcome (taken back, did not happen) stays among the site's *To look at* for a week.
+- The texts now say GnozioCMS, the new name of the product the sites run.
+- Needs GnozioCMS 0.1.177 or later on the site; the protocol's *Commands* section is in the GnozioCMS repository (`docs/omni-protocol.md`).
+- **Tests:** the command's signing and path (also for a site in a folder), every answer a site can give and its wording, the outcome kept from a report (and one for a command Omni did not send ignored), and, with a stand-in for a site that checks the signature itself, the buttons, the page states, *Update all*, and that a stranger can ask for nothing (`tests/unit.php`, `tests/http.php`, `tests/fake-site.php`).
+
 ## 0.1.1 — 2026-10-13 — Updates from Omni itself
 - **Updates in the header.** The version installed, the latest release on GitHub with its notes, **Check now**, **Install** and **Undo**. Omni looks for a new version at most every 12 hours, and the header marks one with a dot.
 - **Install replaces only the code.** `storage/` (the database, the key) is never in a package and never touched, so no backup is needed first. The steps:

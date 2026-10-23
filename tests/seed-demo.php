@@ -44,7 +44,7 @@ $report = static fn(array $over) => array_replace_recursive([
             ['label' => 'Disk free', 'value' => '17 GB', 'status' => 'ok'], ['label' => 'Cron job', 'value' => 'running', 'status' => 'ok'],
         ],
         'extensions' => [['name' => 'pdo_sqlite', 'loaded' => true, 'status' => 'ok'], ['name' => 'zip', 'loaded' => true, 'status' => 'ok'], ['name' => 'curl', 'loaded' => true, 'status' => 'ok'], ['name' => 'intl', 'loaded' => false, 'status' => 'warning']],
-        'environment' => ['PHP' => '8.3.12 (fpm-fcgi)', 'SQLite' => '3.46.1', 'FarosCMS' => '0.1.101 @ 05aa250', 'Memory limit' => '256M', 'HTTPS' => 'yes'],
+        'environment' => ['PHP' => '8.3.12 (fpm-fcgi)', 'SQLite' => '3.46.1', 'GnozioCMS' => '0.1.101 @ 05aa250', 'Memory limit' => '256M', 'HTTPS' => 'yes'],
     ],
 ], $over);
 

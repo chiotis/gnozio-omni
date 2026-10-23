@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Omni\Controllers;
 
 use Omni\Core\App;
+use Omni\Core\Commands;
 use Omni\Core\View;
 use Omni\Models\SiteHealth;
 
@@ -47,7 +48,9 @@ final class SitesController
             default => true,
         }));
 
+        $updatable = count(array_filter($rows, static fn(array $row): bool => Commands::canUpdate($row['site'], $now)));
         View::render('sites/index', [
+            'updatable' => $updatable,
             'title' => 'Sites',
             'owner' => $owner,
             'rows' => $rows,
@@ -132,6 +135,48 @@ final class SitesController
         }
         $this->app->sites->remove($id);
         flash('Removed ' . ($site['label'] ?: ($site['name'] ?: 'the site')) . '. It will be told so the next time it reports.');
+        redirect('/');
+    }
+
+    /** Asks one site to install the latest release. */
+    public function update(int $id): void
+    {
+        $this->app->requireOwner();
+        $site = $this->app->sites->find($id);
+        if ($site === null) {
+            $this->notFound();
+            return;
+        }
+        if (!Commands::canUpdate($site, time())) {
+            flash('There is nothing to update on this site now.', 'info');
+            redirect('/sites/' . $id);
+        }
+        $result = $this->app->commands()->update($site);
+        flash($result['message'], $result['ok'] ? 'success' : 'error');
+        redirect('/sites/' . $id);
+    }
+
+    /** Asks every site that has a newer release to install it, one after the other. */
+    public function updateAll(): void
+    {
+        $this->app->requireOwner();
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300);
+        }
+        $asked = 0;
+        $refused = [];
+        foreach ($this->app->sites->all() as $site) {
+            if (!Commands::canUpdate($site, time())) {
+                continue;
+            }
+            $result = $this->app->commands()->update($site);
+            $result['ok'] ? $asked++ : $refused[] = $result['message'];
+        }
+        if ($asked === 0 && $refused === []) {
+            flash('No site has an update to install.', 'info');
+        } else {
+            flash(($asked > 0 ? $asked . ($asked === 1 ? ' site is' : ' sites are') . ' updating.' : '') . ($refused !== [] ? ' ' . implode(' ', $refused) : ''), $refused === [] ? 'success' : 'warning');
+        }
         redirect('/');
     }
 

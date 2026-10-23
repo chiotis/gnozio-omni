@@ -9,7 +9,7 @@ use Omni\Core\Signature;
 use Omni\Core\SecretBox;
 use Omni\Models\Sites;
 
-/** The four endpoints a FarosCMS site calls (docs/omni-protocol.md in FarosCMS). JSON in and out. */
+/** The four endpoints a GnozioCMS site calls (docs/omni-protocol.md in GnozioCMS). JSON in and out. */
 final class ApiController
 {
     public const PROTOCOLS = [1];

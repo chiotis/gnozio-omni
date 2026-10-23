@@ -1,10 +1,10 @@
 # Omni
 
-One place to watch many [FarosCMS](https://github.com/chiotis/faroscms) sites: their health checks, storage, backups, analytics and updates, with a link to each site's admin. Only the owner signs in.
+One place to watch many [GnozioCMS](https://github.com/chiotis/gnoziocms) sites: their health checks, storage, backups, analytics and updates, with a link to each site's admin. Only the owner signs in.
 
 The public Omni is `https://omni.faroscms.com`. Anyone can run their own and connect their own sites to it: the Omni address is a setting of each site.
 
-Sites talk to Omni with the protocol in FarosCMS's `docs/omni-protocol.md`. In short:
+Sites talk to Omni with the protocol in GnozioCMS's `docs/omni-protocol.md`. In short:
 
 - The site always calls Omni; Omni never calls the site.
 - A site joins with a one-time connection code made in Omni, and gets a secret of its own.
@@ -49,6 +49,8 @@ php -S 127.0.0.1:8121 -t public public/index.php
 | `POST /api/v1/report` | A signed report. Omni keeps the latest one and the last 120 per site |
 | `POST /api/v1/disconnect` | The site leaves. Its history stays |
 
+Omni itself calls the sites at one address only: `POST <site>/_omni/command`, to ask for an update (see above).
+
 A request is refused when:
 
 - its signature does not match, or it comes from an unknown site,
@@ -66,6 +68,19 @@ A site the owner removed is told so with `410`.
 - **Secrets.** Each site's secret is sealed with libsodium in the database, under the key in `storage/key`.
 - **Connection codes.** Only their hash is kept.
 - **What a site sends.** It is shown escaped. Addresses become links only when they are http(s).
+
+## Updating the sites from Omni
+
+When a site's report says a newer GnozioCMS exists, the list shows **Update all (N)** and each such site has an update button (and **Update to X** on its page). Omni then sends that site a signed `update` command (the protocol's [Commands](https://github.com/chiotis/gnoziocms/blob/main/docs/omni-protocol.md)). The site:
+
+1. answers at once that it accepted, so Omni never waits for the update;
+2. makes its verified pre-update backup;
+3. installs the latest official release and checks it, taking it back by itself if it does not work;
+4. reports at once how it went, which Omni shows on the site's page.
+
+A command names no version and carries no code: the site installs from its own update source and checks the package's SHA-256, so even a stolen Omni could only make sites install the official release. A site owner can switch this off (Admin > Omni > *Allow Omni to install updates*), and Omni then says so in words. The site needs GnozioCMS 0.1.177 or later, and its address must be reachable from the Omni server.
+
+A command that has not been answered after 30 minutes is taken as lost, and the site can be asked again. Each site is asked one after the other, so *Update all* returns when all have answered that they accepted (up to 15 seconds each).
 
 ## Updates
 

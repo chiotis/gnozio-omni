@@ -112,5 +112,15 @@ final class Database
                 PRAGMA user_version = 1;
                 SQL);
         }
+        if ($version < 2) {
+            // The last command Omni sent a site (an update), and how it went.
+            $pdo->exec(<<<'SQL'
+                ALTER TABLE sites ADD COLUMN command_id TEXT;
+                ALTER TABLE sites ADD COLUMN command_state TEXT;
+                ALTER TABLE sites ADD COLUMN command_message TEXT;
+                ALTER TABLE sites ADD COLUMN command_at TEXT;
+                PRAGMA user_version = 2;
+                SQL);
+        }
     }
 }
