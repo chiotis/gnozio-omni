@@ -204,6 +204,16 @@ $cSites->recordReport($cId, $withUpdate + ['command' => ['id' => $data['command_
 check('the site\'s report says how it ended', [$cSites->find($cId)['command_state'], $cSites->find($cId)['command_message']], ['installed', 'GnozioCMS 0.2.0 is installed.']);
 $cSites->recordReport($cId, $withUpdate + ['command' => ['id' => 'c_ffffffffffffffff', 'state' => 'failed', 'message' => 'x']], 10, $now + 100);
 check('a report about a command Omni did not send changes nothing', $cSites->find($cId)['command_state'], 'installed');
+// A quick site: its report with the outcome arrives while Omni is still reading the 202.
+$quick = function (string $method, string $url, array $headers, string $body, int $timeout) use ($cSites, $cId, $withUpdate, $now): array {
+    $id = json_decode($body, true)['command_id'];
+    $cSites->recordReport($cId, $withUpdate + ['command' => ['id' => $id, 'state' => 'installed', 'message' => 'Done before the answer was read.']], 10, $now + 5);
+    return ['status' => 202, 'body' => '{"ok":true,"state":"accepted"}', 'error' => ''];
+};
+(new Commands($cSites, $cBox, $quick, fn() => $now + 3))->update($cSites->find($cId));
+check('a site that reports before Omni has read its answer keeps its outcome', [$cSites->find($cId)['command_state'], $cSites->find($cId)['command_message']], ['installed', 'Done before the answer was read.']);
+$reply = ['status' => 202, 'body' => '{"ok":true,"state":"accepted"}', 'error' => ''];
+$commands->update($cSites->find($cId));
 foreach ([[404, '{}', 'does not take commands from Omni yet'], [403, '{"error":"not_allowed"}', 'does not let Omni install updates'], [409, '{"error":"busy"}', 'already updating'], [401, '{"error":"invalid_signature"}', 'no longer recognises this Omni'], [401, '{"error":"stale_timestamp"}', 'clocks'], [500, '{}', 'HTTP 500']] as [$status, $body, $part]) {
     $reply = ['status' => $status, 'body' => $body, 'error' => ''];
     $r = $commands->update($cSites->find($cId));

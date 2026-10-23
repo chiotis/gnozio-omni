@@ -149,6 +149,16 @@ final class Sites
             ->execute([$commandId, $state, self::text($message, 500), gmdate('c', $now ?? time()), $siteId]);
     }
 
+    /**
+     * Keeps what the site answered to a command, but only while the command is still `sending`: a site that is quick reports how
+     * it ended before Omni has read its answer, and that outcome must not be written over.
+     */
+    public function answerCommand(int $siteId, string $commandId, string $state, string $message, ?int $now = null): void
+    {
+        $this->db->prepare("UPDATE sites SET command_state = ?, command_message = ?, command_at = ? WHERE id = ? AND command_id = ? AND command_state = 'sending'")
+            ->execute([$state, self::text($message, 500), gmdate('c', $now ?? time()), $siteId, $commandId]);
+    }
+
     public function countReports(int $siteId): int
     {
         $stmt = $this->db->prepare('SELECT COUNT(*) FROM reports WHERE site_id = ?');
