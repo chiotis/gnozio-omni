@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 — 2026-11-06 — An outdated site stands out on the list
+- **The Version column is red** for a site that is not on the latest GnozioCMS (`0.1.101 → 0.2.0`), instead of blue, so it is seen at a glance. Up to date stays green, not checked yet stays grey.
+- Test: the colour of that chip (`tests/unit.php`).
+
 ## 0.1.3 — 2026-10-23 — A quick site no longer loses the outcome of its update
 - **Fixed:** a site that is quick answers `accepted` and reports how its update ended before Omni has read that answer; Omni then wrote *accepted* over the outcome, and the site's page stayed on "updating" until the command was taken as lost. The answer is now kept only while the command is still being sent, so the outcome always stays. Found by trying Omni 0.1.2 against a real site (GnozioCMS 0.1.177) instead of a stand-in.
 - Test: a site that reports before its answer is read (`tests/unit.php`).

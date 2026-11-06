@@ -121,7 +121,7 @@ final class SiteHealth
         $current = (string)($updates['current'] ?? ($r['faros']['version'] ?? ''));
         $has = $updates['has_update'] ?? null;
         $updateChip = $has === true
-            ? ['label' => $current . ' → ' . (string)($updates['latest'] ?? ''), 'tone' => 'blue', 'title' => 'An update is available']
+            ? ['label' => $current . ' → ' . (string)($updates['latest'] ?? ''), 'tone' => 'red', 'title' => 'An update is available']
             : ['label' => $current !== '' ? $current : '—', 'tone' => $has === false ? 'green' : 'slate', 'title' => $has === false ? 'Up to date' : 'Not checked yet'];
 
         $mode = (string)($analytics['mode'] ?? 'off');
