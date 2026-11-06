@@ -123,7 +123,7 @@ $h = SiteHealth::of($row($report()), $now, 21600);
 check('a healthy site', [$h['state'], $h['label'], $h['issues']], ['ok', 'Healthy', []]);
 check('its chips', [$h['chips']['health']['tone'], $h['chips']['storage']['label'], $h['chips']['backup']['label'], $h['chips']['updates']['tone'], $h['chips']['analytics']['label']], ['green', '300 MB / 1.0 GB', 'Success · 1 h ago', 'green', 'GnozioCMS']);
 $h = SiteHealth::of($row($report(['updates' => ['latest' => '0.2.0', 'has_update' => true]])), $now, 21600);
-check('an update is news, not a problem', [$h['state'], $h['chips']['updates']['label'], $h['issues'][0]['tone']], ['ok', '0.1.101 → 0.2.0', 'blue']);
+check('an update is news, not a problem', [$h['state'], $h['chips']['updates']['label'], $h['chips']['updates']['tone'], $h['issues'][0]['tone']], ['ok', '0.1.101 → 0.2.0', 'red', 'blue']);
 $h = SiteHealth::of($row($report(['system' => ['summary' => ['status' => 'warning', 'label' => 'Warnings'], 'checks' => [['label' => 'Email provider', 'value' => 'not configured', 'status' => 'warning']]]])), $now, 21600);
 check('a warning check makes the site a warning, with the reason', [$h['state'], $h['issues'][0]['text']], ['warning', 'Email provider: not configured']);
 $h = SiteHealth::of($row($report(['backups' => ['last' => ['status' => 'failed', 'message' => 'Disk full.']]])), $now, 21600);
