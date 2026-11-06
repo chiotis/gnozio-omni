@@ -71,7 +71,7 @@ $chip = static fn(array $health, string $key): string => isset($health['chips'][
               <td class="px-3 py-2.5"><?= $chip($health, 'analytics') ?></td>
               <td class="whitespace-nowrap px-3 py-2.5 text-xs <?= $health['silent'] ? 'font-semibold text-red-600' : 'text-slate-500' ?>" title="<?= e(local_time($health['last_heard'])) ?>"><?= e($site['last_report_at'] ? ago($site['last_report_at'], $now) : '—') ?></td>
               <td class="whitespace-nowrap px-4 py-2.5 text-right">
-                <?php if (\Omni\Core\Commands::canUpdate($site, $now)): ?>
+                <?php if (\Omni\Core\Commands::canUpdate($site, $now, $latest ?? null)): ?>
                   <form method="post" action="/sites/<?= (int)$site['id'] ?>/update" class="inline" data-confirm="Ask <?= e($site['label'] ?: $site['name']) ?> to install the latest release?">
                     <?= csrf_field() ?>
                     <button type="submit" class="inline-flex rounded p-1 text-blue-500 hover:bg-blue-50 hover:text-blue-700" title="Update" aria-label="Update <?= e($site['label'] ?: ($site['name'] ?: 'the site')) ?>">

@@ -18,9 +18,10 @@ final class SiteHealth
 
     /**
      * @param array<string, mixed> $site a row of `sites`
-     * @return array{state: string, label: string, tone: string, silent: bool, last_heard: ?string, report: ?array<string, mixed>, chips: array<string, array{label: string, tone: string, title: string}>, issues: array<int, array{text: string, tone: string}>}
+     * @param ?string $latest the latest GnozioCMS, as Omni read it itself (null when not known)
+     * @return array{state: string, label: string, tone: string, silent: bool, last_heard: ?string, report: ?array<string, mixed>, behind: ?string, chips: array<string, array{label: string, tone: string, title: string}>, issues: array<int, array{text: string, tone: string}>}
      */
-    public static function of(array $site, int $now, int $reportEvery): array
+    public static function of(array $site, int $now, int $reportEvery, ?string $latest = null): array
     {
         $report = is_string($site['latest_report'] ?? null) ? json_decode($site['latest_report'], true) : null;
         $report = is_array($report) ? $report : null;
@@ -29,8 +30,9 @@ final class SiteHealth
         $heardAt = $lastHeard ? strtotime((string)$lastHeard) : false;
         $silent = $status === 'connected' && $heardAt !== false && $now - $heardAt > max(self::SILENT_AFTER, 2 * $reportEvery);
 
-        $chips = $report !== null ? self::chips($report, $now) : [];
-        $issues = $report !== null ? self::issues($report, $now) : [];
+        $behind = $report !== null ? self::behind($report, $latest) : null;
+        $chips = $report !== null ? self::chips($report, $now, $latest) : [];
+        $issues = $report !== null ? self::issues($report, $now, $behind) : [];
         if ($silent) {
             array_unshift($issues, ['text' => 'No report since ' . gmdate('Y-m-d H:i', (int)$heardAt) . ' UTC', 'tone' => 'red']);
         }
@@ -54,7 +56,7 @@ final class SiteHealth
             [$state, $label, $tone] = in_array('red', $tones, true) ? ['error', 'Needs attention', 'red'] : (in_array('amber', $tones, true) ? ['warning', 'Warnings', 'amber'] : ['ok', 'Healthy', 'green']);
         }
 
-        return ['state' => $state, 'label' => $label, 'tone' => $tone, 'silent' => $silent, 'last_heard' => $lastHeard ? (string)$lastHeard : null, 'report' => $report, 'chips' => $chips, 'issues' => $issues];
+        return ['state' => $state, 'label' => $label, 'tone' => $tone, 'silent' => $silent, 'last_heard' => $lastHeard ? (string)$lastHeard : null, 'report' => $report, 'behind' => $behind, 'chips' => $chips, 'issues' => $issues];
     }
 
     /**
@@ -87,8 +89,26 @@ final class SiteHealth
         };
     }
 
+    /**
+     * The GnozioCMS version a site is behind, or null when it is not behind or that is not known: the newer of the
+     * latest its own last check found and $latest (what Omni read itself), when the site's version is older than it.
+     *
+     * @param array<string, mixed> $r a report
+     */
+    public static function behind(array $r, ?string $latest): ?string
+    {
+        $updates = (array)($r['updates'] ?? []);
+        $current = (string)($updates['current'] ?? ($r['faros']['version'] ?? ''));
+        $reported = ($updates['has_update'] ?? null) === true ? (string)($updates['latest'] ?? '') : '';
+        $target = $reported !== '' && ($latest === null || version_compare($reported, $latest, '>')) ? $reported : ($latest ?? '');
+        if ($target === '') {
+            return null;
+        }
+        return $current === '' || version_compare($current, $target, '<') ? $target : null;
+    }
+
     /** @param array<string, mixed> $r @return array<string, array{label: string, tone: string, title: string}> */
-    private static function chips(array $r, int $now): array
+    private static function chips(array $r, int $now, ?string $latest): array
     {
         $summary = (array)($r['system']['summary'] ?? []);
         $health = (string)($summary['status'] ?? '');
@@ -119,10 +139,11 @@ final class SiteHealth
         }
 
         $current = (string)($updates['current'] ?? ($r['faros']['version'] ?? ''));
-        $has = $updates['has_update'] ?? null;
-        $updateChip = $has === true
-            ? ['label' => $current . ' → ' . (string)($updates['latest'] ?? ''), 'tone' => 'red', 'title' => 'An update is available']
-            : ['label' => $current !== '' ? $current : '—', 'tone' => $has === false ? 'green' : 'slate', 'title' => $has === false ? 'Up to date' : 'Not checked yet'];
+        $behind = self::behind($r, $latest);
+        $known = $latest !== null || ($updates['has_update'] ?? null) === false;
+        $updateChip = $behind !== null
+            ? ['label' => ($current !== '' ? $current : '?') . ' → ' . $behind, 'tone' => 'red', 'title' => 'GnozioCMS ' . $behind . ' is available']
+            : ['label' => $current !== '' ? $current : '—', 'tone' => $known && $current !== '' ? 'green' : 'slate', 'title' => $known && $current !== '' ? 'Up to date' : 'Not checked yet'];
 
         $mode = (string)($analytics['mode'] ?? 'off');
         $analyticsChip = ['label' => self::MODES[$mode] ?? $mode, 'tone' => !empty($analytics['enabled']) ? 'green' : 'slate', 'title' => !empty($analytics['enabled']) ? 'Visits are counted' : 'No tracking'];
@@ -137,7 +158,7 @@ final class SiteHealth
     }
 
     /** @param array<string, mixed> $r @return array<int, array{text: string, tone: string}> */
-    private static function issues(array $r, int $now): array
+    private static function issues(array $r, int $now, ?string $behind): array
     {
         $issues = [];
         foreach ((array)($r['system']['checks'] ?? []) as $check) {
@@ -173,8 +194,8 @@ final class SiteHealth
             }
         }
 
-        if (($r['updates']['has_update'] ?? null) === true) {
-            $issues[] = ['text' => 'GnozioCMS ' . (string)($r['updates']['latest'] ?? '') . ' is available', 'tone' => 'blue'];
+        if ($behind !== null) {
+            $issues[] = ['text' => 'GnozioCMS ' . $behind . ' is available', 'tone' => 'blue'];
         }
         return $issues;
     }

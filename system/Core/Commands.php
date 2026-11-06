@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Omni\Core;
 
+use Omni\Models\SiteHealth;
 use Omni\Models\Sites;
 
 /**
@@ -30,13 +31,18 @@ final class Commands
             && $now - (int)strtotime((string)($site['command_at'] ?? '')) < self::IN_FLIGHT;
     }
 
-    /** Whether the site can be asked to update now: connected, its last report says a newer release exists, nothing in flight. @param array<string, mixed> $site */
-    public static function canUpdate(array $site, int $now): bool
+    /**
+     * Whether the site can be asked to update now: connected, behind (its last report says a newer release exists, or
+     * its version is older than $latest, the latest GnozioCMS Omni read itself), nothing in flight.
+     *
+     * @param array<string, mixed> $site
+     */
+    public static function canUpdate(array $site, int $now, ?string $latest = null): bool
     {
         $report = is_string($site['latest_report'] ?? null) ? json_decode($site['latest_report'], true) : null;
         return ($site['status'] ?? '') === 'connected'
             && ($site['url'] ?? '') !== ''
-            && is_array($report) && ($report['updates']['has_update'] ?? null) === true
+            && is_array($report) && SiteHealth::behind($report, $latest) !== null
             && !self::inFlight($site, $now);
     }
 

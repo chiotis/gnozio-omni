@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 — 2026-11-06 — Omni knows the latest GnozioCMS itself
+- **A site behind the latest GnozioCMS is red even when it says it is up to date.** Omni reads `release.json` of the GnozioCMS repository (`chiotis/gnoziocms`) at most every hour and compares each site's version with it, so a site whose own update check is old no longer looks current. When GitHub cannot be read, the last version found stays in use; when none was ever found, the site's own check decides, as before.
+- The same comparison drives the **Update available** filter and count, the update button on each row, **Update all**, and **Update to X** on the site's page, whose *Latest* is now red too. Asking such a site is safe: it looks for the latest release itself and answers *up to date* when there is nothing newer.
+- Tests: the comparison (also `0.1.99` before `0.1.231`), a site behind Omni's latest that can be asked to update, and reading the release (kept an hour, kept when GitHub does not answer, a bad version ignored) (`tests/unit.php`).
+
 ## 0.1.5 — 2026-11-06 — Releases from the repository's new name
 - Omni looks for its updates at `chiotis/gnozio-omni`, the new name of its GitHub repository. The old address still worked through GitHub's redirect; this one no longer depends on it.
 

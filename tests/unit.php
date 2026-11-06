@@ -12,8 +12,8 @@ define('STORAGE_PATH', sys_get_temp_dir() . '/omni-unit-' . getmypid());
 require SYSTEM_PATH . '/Core/autoload.php';
 require SYSTEM_PATH . '/Core/helpers.php';
 
-use Omni\Core\{ConnectCode, Database, SecretBox, Signature};
-use Omni\Models\{Attempts, Owners, SiteHealth, Sites};
+use Omni\Core\{Commands, ConnectCode, Database, GnozioRelease, SecretBox, Signature, Updater};
+use Omni\Models\{Attempts, Owners, Settings, SiteHealth, Sites};
 
 $fail = 0;
 function check(string $label, $actual, $expected): void { global $fail; $ok = $actual === $expected; if (!$ok) $fail++; echo ($ok ? 'ok   ' : 'FAIL ') . $label . ($ok ? '' : ' => ' . json_encode($actual, JSON_UNESCAPED_SLASHES) . ' expected ' . json_encode($expected, JSON_UNESCAPED_SLASHES)) . "\n"; }
@@ -124,6 +124,34 @@ check('a healthy site', [$h['state'], $h['label'], $h['issues']], ['ok', 'Health
 check('its chips', [$h['chips']['health']['tone'], $h['chips']['storage']['label'], $h['chips']['backup']['label'], $h['chips']['updates']['tone'], $h['chips']['analytics']['label']], ['green', '300 MB / 1.0 GB', 'Success · 1 h ago', 'green', 'GnozioCMS']);
 $h = SiteHealth::of($row($report(['updates' => ['latest' => '0.2.0', 'has_update' => true]])), $now, 21600);
 check('an update is news, not a problem', [$h['state'], $h['chips']['updates']['label'], $h['chips']['updates']['tone'], $h['issues'][0]['tone']], ['ok', '0.1.101 → 0.2.0', 'red', 'blue']);
+// Behind the latest GnozioCMS that Omni read itself, even when the site's own check says up to date.
+$h = SiteHealth::of($row($report()), $now, 21600, '0.1.231');
+check('behind the latest Omni read, though the site says up to date', [$h['behind'], $h['chips']['updates']['label'], $h['chips']['updates']['tone'], $h['issues'][0]['text'] ?? ''], ['0.1.231', '0.1.101 → 0.1.231', 'red', 'GnozioCMS 0.1.231 is available']);
+check('on the latest it is green', [SiteHealth::of($row($report()), $now, 21600, '0.1.101')['chips']['updates']['tone'], SiteHealth::of($row($report()), $now, 21600, '0.1.101')['behind']], ['green', null]);
+check('a newer version than Omni knows is not behind', SiteHealth::of($row($report()), $now, 21600, '0.1.99')['behind'], null);
+check('the newer of the two latests counts', SiteHealth::behind(['updates' => ['current' => '0.1.1', 'latest' => '0.1.9', 'has_update' => true]], '0.1.5'), '0.1.9');
+check('versions compare as numbers (0.1.99 < 0.1.231)', SiteHealth::behind(['updates' => ['current' => '0.1.99']], '0.1.231'), '0.1.231');
+check('nothing known, not behind and grey', [SiteHealth::behind(['updates' => ['current' => '0.1.1']], null), SiteHealth::of($row($report(['updates' => ['current' => '0.1.1', 'latest' => null, 'has_update' => null]])), $now, 21600)['chips']['updates']['tone']], [null, 'slate']);
+check('a site behind Omni\'s latest can be asked to update', Commands::canUpdate(['status' => 'connected', 'url' => 'https://x.test', 'latest_report' => json_encode(['updates' => ['current' => '0.1.1', 'has_update' => false]])], $now, '0.1.2'), true);
+
+// Omni reads the latest GnozioCMS itself, keeps it an hour, and keeps the last one found when GitHub cannot be read.
+$gSettings = new Settings($db);
+$gCalls = 0;
+$gAnswer = ['status' => 200, 'body' => '{"version":"0.1.231"}', 'error' => ''];
+$gClock = $now;
+$gnozio = new GnozioRelease($gSettings, 'https://example.test/gnozio.json', function (string $url, int $timeout) use (&$gCalls, &$gAnswer): array { $gCalls++; return $gAnswer; }, function () use (&$gClock): int { return $gClock; });
+check('reads the latest GnozioCMS', [$gnozio->latest(), $gCalls], ['0.1.231', 1]);
+check('and keeps it for an hour', [$gnozio->latest(), $gCalls], ['0.1.231', 1]);
+$gClock = $now + GnozioRelease::CHECK_EVERY;
+$gAnswer = ['status' => 0, 'body' => '', 'error' => 'timed out'];
+check('GitHub not answering keeps the last version', [$gnozio->latest(), $gCalls], ['0.1.231', 2]);
+$gClock += GnozioRelease::CHECK_EVERY_FAILED;
+$gAnswer = ['status' => 200, 'body' => '{"version":"<b>1</b>"}', 'error' => ''];
+check('a version that is not x.y.z is ignored', [$gnozio->latest(), $gCalls], ['0.1.231', 3]);
+$gAnswer = ['status' => 200, 'body' => '{"version":"0.1.232"}', 'error' => ''];
+check('asked again, it reads the new one', $gnozio->latest(true), '0.1.232');
+check('never read, nothing known', (new GnozioRelease(new Settings(Database::open(STORAGE_PATH . '/db/gnozio.sqlite')), 'https://example.test/g.json', fn(string $u, int $t): array => ['status' => 404, 'body' => '', 'error' => '']))->latest(), null);
+
 $h = SiteHealth::of($row($report(['system' => ['summary' => ['status' => 'warning', 'label' => 'Warnings'], 'checks' => [['label' => 'Email provider', 'value' => 'not configured', 'status' => 'warning']]]])), $now, 21600);
 check('a warning check makes the site a warning, with the reason', [$h['state'], $h['issues'][0]['text']], ['warning', 'Email provider: not configured']);
 $h = SiteHealth::of($row($report(['backups' => ['last' => ['status' => 'failed', 'message' => 'Disk full.']]])), $now, 21600);
@@ -142,8 +170,6 @@ $h = SiteHealth::of($row($report(['analytics' => ['enabled' => false, 'mode' => 
 check('no tracking, no backups', [$h['chips']['analytics']['label'], $h['chips']['backup']['label'], $h['state']], ['Off', 'Off', 'ok']);
 
 // ---- updates
-use Omni\Core\Updater;
-use Omni\Models\Settings;
 check('a package may hold the code', [Updater::allowedPath('system/Core/App.php'), Updater::allowedPath('public/assets/css/app.css'), Updater::allowedPath('public/index.php'), Updater::allowedPath('VERSION')], [true, true, true, true]);
 check('and nothing else: data, other folders, climbing out, absolute or Windows paths', [Updater::allowedPath('storage/key'), Updater::allowedPath('storage/db/omni.sqlite'), Updater::allowedPath('tests/unit.php'), Updater::allowedPath('system/../storage/key'), Updater::allowedPath('/system/x.php'), Updater::allowedPath('system\\x.php'), Updater::allowedPath('public/x.php'), Updater::allowedPath('')], [false, false, false, false, false, false, false, false]);
 $updater = new Updater(ROOT_PATH, STORAGE_PATH, STORAGE_PATH . '/db/omni.sqlite', new Settings($db), 'https://example.test/release.json', fn() => [], fn() => [], fn() => []);
@@ -169,7 +195,6 @@ check('its manifest is one Omni accepts', $updater->validateManifest($one)['vers
 exec('rm -rf ' . escapeshellarg(STORAGE_PATH . '/b1') . ' ' . escapeshellarg(STORAGE_PATH . '/b2'));
 
 // ---- commands
-use Omni\Core\Commands;
 $cDb = Database::open(STORAGE_PATH . '/db/commands.sqlite');
 $cSites = new Sites($cDb);
 $cBox = new SecretBox(STORAGE_PATH . '/key');
