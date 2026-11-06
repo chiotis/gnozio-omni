@@ -103,7 +103,7 @@ The folder Omni runs from, `system/` and `public/` must be writable by PHP for t
 1. Raise `VERSION` and add its entry at the top of `CHANGELOG.md` (`## 0.1.2 — date — title`).
 2. Push to `main`.
 
-The Release workflow (`.github/workflows/release.yml`) then runs the tests, tags the version, and attaches `omni-<version>.zip` and `release.json` to the GitHub Release (built by `scripts/build-release.php`, the same bytes for the same version). Every Omni finds it at `https://github.com/chiotis/faros-omni/releases/latest/download/release.json`.
+The Release workflow (`.github/workflows/release.yml`) then runs the tests, tags the version, and attaches `omni-<version>.zip` and `release.json` to the GitHub Release (built by `scripts/build-release.php`, the same bytes for the same version). Every Omni finds it at `https://github.com/chiotis/gnozio-omni/releases/latest/download/release.json`.
 
 ## Styles
 

@@ -147,7 +147,7 @@ use Omni\Models\Settings;
 check('a package may hold the code', [Updater::allowedPath('system/Core/App.php'), Updater::allowedPath('public/assets/css/app.css'), Updater::allowedPath('public/index.php'), Updater::allowedPath('VERSION')], [true, true, true, true]);
 check('and nothing else: data, other folders, climbing out, absolute or Windows paths', [Updater::allowedPath('storage/key'), Updater::allowedPath('storage/db/omni.sqlite'), Updater::allowedPath('tests/unit.php'), Updater::allowedPath('system/../storage/key'), Updater::allowedPath('/system/x.php'), Updater::allowedPath('system\\x.php'), Updater::allowedPath('public/x.php'), Updater::allowedPath('')], [false, false, false, false, false, false, false, false]);
 $updater = new Updater(ROOT_PATH, STORAGE_PATH, STORAGE_PATH . '/db/omni.sqlite', new Settings($db), 'https://example.test/release.json', fn() => [], fn() => [], fn() => []);
-$good = ['version' => '0.2.0', 'min_php' => '8.1', 'package_url' => 'https://github.com/chiotis/faros-omni/releases/download/v0.2.0/omni-0.2.0.zip', 'sha256' => str_repeat('a', 64), 'size' => 40000, 'notes' => '- x'];
+$good = ['version' => '0.2.0', 'min_php' => '8.1', 'package_url' => 'https://github.com/chiotis/gnozio-omni/releases/download/v0.2.0/omni-0.2.0.zip', 'sha256' => str_repeat('a', 64), 'size' => 40000, 'notes' => '- x'];
 check('a valid release.json', $updater->validateManifest($good)['version'] ?? null, '0.2.0');
 check('refused: no https, a bad hash, a size out of bounds, a version that is not one', [
     $updater->validateManifest(['package_url' => 'http://github.com/x.zip'] + $good), $updater->validateManifest(['sha256' => 'abc'] + $good),
