@@ -12,6 +12,6 @@ return [
     // How many reports are kept per site, for trends.
     'keep_reports' => 120,
     // Where Omni learns about new versions (Admin > Updates). Tests point it at a local server.
-    'release_url' => getenv('OMNI_RELEASE_URL') ?: 'https://github.com/chiotis/faros-omni/releases/latest/download/release.json',
+    'release_url' => getenv('OMNI_RELEASE_URL') ?: 'https://github.com/chiotis/gnozio-omni/releases/latest/download/release.json',
     'allow_local_release' => getenv('OMNI_RELEASE_URL') !== false,
 ];

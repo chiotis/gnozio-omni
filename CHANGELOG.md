@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.5 — 2026-11-06 — Releases from the repository's new name
+- Omni looks for its updates at `chiotis/gnozio-omni`, the new name of its GitHub repository. The old address still worked through GitHub's redirect; this one no longer depends on it.
+
 ## 0.1.4 — 2026-11-06 — An outdated site stands out on the list
 - **The Version column is red** for a site that is not on the latest GnozioCMS (`0.1.101 → 0.2.0`), instead of blue, so it is seen at a glance. Up to date stays green, not checked yet stays grey.
 - Test: the colour of that chip (`tests/unit.php`).
