@@ -1,7 +1,7 @@
 <?php
 /**
  * @var array<string, mixed> $site @var array<string, mixed> $health @var array{code: string, expires_at: string}|null $code
- * @var string|null $open_code_expires @var int $reports_kept @var string $omni_url @var int $now
+ * @var string|null $open_code_expires @var int $reports_kept @var string $omni_url @var int $now @var string|null $latest
  */
 $r = $health['report'];
 $name = $site['label'] ?: ($site['name'] ?: 'Untitled');
@@ -30,10 +30,10 @@ $statusTone = ['ok' => 'green', 'success' => 'green', 'warning' => 'amber', 'err
     </p>
   </div>
   <div class="flex flex-wrap items-center gap-2">
-  <?php if (\Omni\Core\Commands::canUpdate($site, $now)): ?>
-    <form method="post" action="/sites/<?= (int)$site['id'] ?>/update" data-confirm="Ask <?= e($name) ?> to install GnozioCMS <?= e((string)($r['updates']['latest'] ?? '')) ?>? It makes its verified backup first and takes the update back by itself if it does not work there." data-update-site>
+  <?php if (\Omni\Core\Commands::canUpdate($site, $now, $latest ?? null)): ?>
+    <form method="post" action="/sites/<?= (int)$site['id'] ?>/update" data-confirm="Ask <?= e($name) ?> to install GnozioCMS <?= e((string)$health['behind']) ?>? It makes its verified backup first and takes the update back by itself if it does not work there." data-update-site>
       <?= csrf_field() ?>
-      <button type="submit" class="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100">Update to <?= e((string)($r['updates']['latest'] ?? '')) ?></button>
+      <button type="submit" class="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100">Update to <?= e((string)$health['behind']) ?></button>
     </form>
   <?php endif; ?>
   <?php if ($site['admin_url'] !== ''): ?>
@@ -155,7 +155,7 @@ $statusTone = ['ok' => 'green', 'success' => 'green', 'warning' => 'amber', 'err
         <div class="<?= $cardHead ?>"><h2 class="<?= $h2 ?>">Version and analytics</h2></div>
         <dl class="divide-y divide-slate-50">
           <?= $row('GnozioCMS', e((string)($updates['current'] ?? '')) . (!empty($r['faros']['commit']) ? ' <span class="text-xs text-slate-400">@ ' . e((string)$r['faros']['commit']) . '</span>' : '')) ?>
-          <?= $row('Latest', ($updates['has_update'] ?? null) === true ? badge((string)$updates['latest'], 'blue', 'An update is available') : e((string)($updates['latest'] ?? '—'))) ?>
+          <?= $row('Latest', $health['behind'] !== null ? badge((string)$health['behind'], 'red', 'An update is available') : e((string)($latest ?? ($updates['latest'] ?? '—')))) ?>
           <?= $row('Checked', e(local_time($updates['checked_at'] ?? null)) . (($updates['source_status'] ?? '') === 'unreachable' ? ' ' . badge('unreachable', 'amber') : '')) ?>
           <?php if (!empty($site['command_state'])): $cmdTone = ['installed' => 'green', 'up_to_date' => 'green', 'sending' => 'blue', 'accepted' => 'blue', 'running' => 'blue', 'unverified' => 'amber', 'rolled_back' => 'amber']; ?>
             <div class="px-4 py-2 text-sm" data-command>

@@ -13,5 +13,7 @@ return [
     'keep_reports' => 120,
     // Where Omni learns about new versions (Admin > Updates). Tests point it at a local server.
     'release_url' => getenv('OMNI_RELEASE_URL') ?: 'https://github.com/chiotis/gnozio-omni/releases/latest/download/release.json',
+    // Where Omni learns the latest GnozioCMS, to tell which sites are behind without waiting for their own check.
+    'gnozio_release_url' => getenv('OMNI_GNOZIO_RELEASE_URL') ?: 'https://github.com/chiotis/gnoziocms/releases/latest/download/release.json',
     'allow_local_release' => getenv('OMNI_RELEASE_URL') !== false,
 ];

@@ -25,9 +25,11 @@ final class SitesController
         $this->app->updater()->status();
         $now = time();
         $every = (int)$this->app->config['report_every'];
+        // The latest GnozioCMS, read by Omni at most every hour: a site whose own check is old still shows as behind.
+        $latest = $this->app->gnozioRelease()->latest();
         $rows = [];
         foreach ($this->app->sites->all() as $site) {
-            $rows[] = ['site' => $site, 'health' => SiteHealth::of($site, $now, $every)];
+            $rows[] = ['site' => $site, 'health' => SiteHealth::of($site, $now, $every, $latest)];
         }
 
         $counts = ['all' => count($rows), 'ok' => 0, 'attention' => 0, 'updates' => 0, 'waiting' => 0];
@@ -35,7 +37,7 @@ final class SitesController
             $state = $row['health']['state'];
             $counts['ok'] += $state === 'ok' ? 1 : 0;
             $counts['attention'] += in_array($state, ['warning', 'error', 'silent'], true) ? 1 : 0;
-            $counts['updates'] += ($row['health']['report']['updates']['has_update'] ?? null) === true ? 1 : 0;
+            $counts['updates'] += $row['health']['behind'] !== null ? 1 : 0;
             $counts['waiting'] += in_array($state, ['pending', 'disconnected'], true) ? 1 : 0;
         }
 
@@ -43,17 +45,18 @@ final class SitesController
         $show = array_key_exists($show, self::FILTERS) ? $show : 'all';
         $rows = array_values(array_filter($rows, static fn(array $row): bool => match ($show) {
             'attention' => in_array($row['health']['state'], ['warning', 'error', 'silent'], true),
-            'updates' => ($row['health']['report']['updates']['has_update'] ?? null) === true,
+            'updates' => $row['health']['behind'] !== null,
             'waiting' => in_array($row['health']['state'], ['pending', 'disconnected'], true),
             default => true,
         }));
 
-        $updatable = count(array_filter($rows, static fn(array $row): bool => Commands::canUpdate($row['site'], $now)));
+        $updatable = count(array_filter($rows, static fn(array $row): bool => Commands::canUpdate($row['site'], $now, $latest)));
         View::render('sites/index', [
             'updatable' => $updatable,
             'title' => 'Sites',
             'owner' => $owner,
             'rows' => $rows,
+            'latest' => $latest,
             'counts' => $counts,
             'show' => $show,
             'filters' => self::FILTERS,
@@ -93,7 +96,8 @@ final class SitesController
             'title' => $site['label'] ?: ($site['name'] ?: 'Site'),
             'owner' => $owner,
             'site' => $site,
-            'health' => SiteHealth::of($site, $now, (int)$this->app->config['report_every']),
+            'health' => SiteHealth::of($site, $now, (int)$this->app->config['report_every'], $latest = $this->app->gnozioRelease()->latest()),
+            'latest' => $latest,
             'code' => $code,
             'open_code_expires' => $code === null ? $this->app->sites->openCodeExpiry($id, $now) : null,
             'reports_kept' => $this->app->sites->countReports($id),
@@ -147,7 +151,7 @@ final class SitesController
             $this->notFound();
             return;
         }
-        if (!Commands::canUpdate($site, time())) {
+        if (!Commands::canUpdate($site, time(), $this->app->gnozioRelease()->latest())) {
             flash('There is nothing to update on this site now.', 'info');
             redirect('/sites/' . $id);
         }
@@ -165,8 +169,9 @@ final class SitesController
         }
         $asked = 0;
         $refused = [];
+        $latest = $this->app->gnozioRelease()->latest();
         foreach ($this->app->sites->all() as $site) {
-            if (!Commands::canUpdate($site, time())) {
+            if (!Commands::canUpdate($site, time(), $latest)) {
                 continue;
             }
             $result = $this->app->commands()->update($site);

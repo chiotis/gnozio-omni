@@ -20,7 +20,7 @@ $socket = stream_socket_server('tcp://127.0.0.1:0');
 $port = (int)substr((string)stream_socket_get_name($socket, false), strrpos((string)stream_socket_get_name($socket, false), ':') + 1);
 fclose($socket);
 $base = 'http://127.0.0.1:' . $port;
-$server = proc_open(['php', '-S', '127.0.0.1:' . $port, '-t', $root . '/public', $root . '/public/index.php'], [1 => ['file', $storage . '/server.log', 'a'], 2 => ['file', $storage . '/server.log', 'a']], $pipes, $root, ['OMNI_STORAGE' => $storage, 'OMNI_RELEASE_URL' => 'http://127.0.0.1:9/release.json'] + getenv());
+$server = proc_open(['php', '-S', '127.0.0.1:' . $port, '-t', $root . '/public', $root . '/public/index.php'], [1 => ['file', $storage . '/server.log', 'a'], 2 => ['file', $storage . '/server.log', 'a']], $pipes, $root, ['OMNI_STORAGE' => $storage, 'OMNI_RELEASE_URL' => 'http://127.0.0.1:9/release.json', 'OMNI_GNOZIO_RELEASE_URL' => 'http://127.0.0.1:9/gnozio.json'] + getenv());
 register_shutdown_function(static function () use ($server, $storage): void {
     proc_terminate($server);
     proc_close($server);

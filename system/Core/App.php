@@ -24,6 +24,7 @@ final class App
     public Attempts $attempts;
     public SecretBox $secrets;
     private ?Updater $updater = null;
+    private ?GnozioRelease $gnozio = null;
 
     /** @param array<string, mixed> $config */
     public function __construct(public array $config)
@@ -119,6 +120,11 @@ final class App
     public function commands(): Commands
     {
         return new Commands($this->sites, $this->secrets, [Http::class, 'request']);
+    }
+
+    public function gnozioRelease(): GnozioRelease
+    {
+        return $this->gnozio ??= new GnozioRelease($this->settings, (string)$this->config['gnozio_release_url'], [Updater::class, 'fetch']);
     }
 
     public function updater(): Updater

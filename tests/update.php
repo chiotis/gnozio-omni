@@ -44,7 +44,7 @@ $base = "http://127.0.0.1:$port";
 $servers = [
     proc_open(['php', '-S', "127.0.0.1:$relPort", '-t', $rel], [1 => ['file', "$tmp/rel.log", 'a'], 2 => ['file', "$tmp/rel.log", 'a']], $p1, $rel),
     proc_open(['php', '-S', "127.0.0.1:$port", '-t', "$live/public", "$live/public/index.php"], [1 => ['file', "$tmp/live.log", 'a'], 2 => ['file', "$tmp/live.log", 'a']], $p2, $live,
-        ['OMNI_STORAGE' => $storage, 'OMNI_RELEASE_URL' => "http://127.0.0.1:$relPort/release.json", 'PHP_CLI_SERVER_WORKERS' => '4'] + getenv()),
+        ['OMNI_STORAGE' => $storage, 'OMNI_RELEASE_URL' => "http://127.0.0.1:$relPort/release.json", 'OMNI_GNOZIO_RELEASE_URL' => 'http://127.0.0.1:9/gnozio.json', 'PHP_CLI_SERVER_WORKERS' => '4'] + getenv()),
 ];
 register_shutdown_function(static function () use ($servers, $tmp): void {
     foreach ($servers as $s) { proc_terminate($s); proc_close($s); }
